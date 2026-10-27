@@ -1,3 +1,8 @@
+"""
+CORRECTED BUILD 2026-08-27 - erosion GEP account (soil-retention service).
+Fix: elasticity crop-name matching (SPAM_ALIAS_MAP) now uses exact FAOSTAT item
+names; see CHANGELOG.md. All other logic is unchanged from the submitted pipeline.
+"""
 # =============================================================================
 # erosion_functions.py
 #
@@ -436,52 +441,61 @@ RESAMPLE_DEM        = Resampling.average
 # ==========================================================
 # 3) Elasticity loader (with SPAM support)
 # ==========================================================
+# ---------------------------------------------------------------------------
+# CORRECTED 2026-08-27 (elasticity name-matching fix).
+# The previous alias list used short crop names ("maize", "potato", "sugarcane")
+# that never exact-matched the FAOSTAT item names in the elasticity table
+# ("Maize (corn)", "Potatoes", "Sugar cane"), so 19 of 46 crops silently took
+# the 0.08 fallback -- most importantly maize (true elasticity 0.30). Each entry
+# below now lists the exact FAO item name FIRST, with the old short names kept as
+# backups. See CHANGELOG.md for the results impact.
+# ---------------------------------------------------------------------------
 SPAM_ALIAS_MAP = {
     "whea": ["wheat"],
     "rice": ["rice"],
-    "maiz": ["maize", "corn"],
+    "maiz": ["maize (corn)", "maize", "corn"],
     "barl": ["barley"],
     "sorg": ["sorghum"],
     "mill": ["millet", "small millet"],
-    "pmil": ["pearl millet"],
-    "pota": ["potato"],
-    "cass": ["cassava"],
-    "soyb": ["soybean", "soy"],
+    "pmil": ["millet", "pearl millet"],
+    "pota": ["potatoes", "potato"],
+    "cass": ["cassava, fresh", "cassava"],
+    "soyb": ["soya beans", "soybean", "soy"],
     "grou": ["groundnut", "peanut"],
-    "cott": ["cotton"],
-    "sugc": ["sugarcane"],
-    "bana": ["banana"],
-    "plnt": ["plantain"],
-    "coco": ["cocoa"],
-    "coff": ["arabica coffee", "coffee"],
-    "rcof": ["robusta coffee"],
-    "teas": ["tea"],
-    "toba": ["tobacco"],
-    "toma": ["tomato"],
-    "onio": ["onion"],
+    "cott": ["seed cotton, unginned", "cotton"],
+    "sugc": ["sugar cane", "sugarcane"],
+    "bana": ["bananas", "banana"],
+    "plnt": ["plantains and cooking bananas", "plantain"],
+    "coco": ["cocoa beans", "cocoa"],
+    "coff": ["coffee, green", "arabica coffee", "coffee"],
+    "rcof": ["coffee, green", "robusta coffee"],
+    "teas": ["tea leaves", "tea"],
+    "toba": ["unmanufactured tobacco", "tobacco"],
+    "toma": ["tomatoes", "tomato"],
+    "onio": ["onions and shallots, dry (excluding dehydrated)", "onion"],
     "vege": ["vegetable", "other vegetables"],
-    "sunf": ["sunflower"],
-    "rape": ["rapeseed", "canola"],
-    "sesa": ["sesame"],
-    "citr": ["citrus"],
-    "lent": ["lentil"],
-    "bean": ["bean"],
-    "chic": ["chickpea"],
-    "cowp": ["cowpea"],
-    "pige": ["pigeon pea"],
+    "sunf": ["sunflower seed", "sunflower"],
+    "rape": ["rape or colza seed", "rapeseed", "canola"],
+    "sesa": ["sesame seed", "sesame"],
+    "citr": ["oranges", "citrus"],
+    "lent": ["lentils, dry", "lentil"],
+    "bean": ["beans, dry", "bean"],
+    "chic": ["chick peas, dry", "chickpea"],
+    "cowp": ["cow peas, dry", "cowpea"],
+    "pige": ["peas, dry", "pigeon pea"],
     "yams": ["yams"],
-    "swpo": ["sweet potato"],
-    "sugb": ["sugarbeet"],
-    "oilp": ["oilpalm", "oil palm"],
-    "cnut": ["coconut"],
+    "swpo": ["sweet potatoes", "sweet potato"],
+    "sugb": ["sugar beet", "sugarbeet"],
+    "oilp": ["oil palm fruit", "oilpalm", "oil palm"],
+    "cnut": ["coconuts, in shell", "coconut"],
     "ocer": ["other cereals"],
     "orts": ["other roots"],
-    "opul": ["other pulses"],
-    "ooil": ["other oil crops"],
-    "ofib": ["other fibre crops"],
-    "rubb": ["rubber"],
-    "trof": ["other tropical fruit"],
-    "temf": ["temperate fruit"],
+    "opul": ["other pulses n.e.c.", "other pulses"],
+    "ooil": ["castor oil seeds", "other oil crops"],
+    "ofib": ["agave fibres, raw, n.e.c.", "other fibre crops"],
+    "rubb": ["natural rubber in primary forms", "rubber"],
+    "trof": ["other tropical fruits, n.e.c.", "other tropical fruit"],
+    "temf": ["apples", "temperate fruit"],
     "rest": ["rest of crops"],
 }
 
