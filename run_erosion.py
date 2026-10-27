@@ -16,6 +16,15 @@ Pointing GEP_EROSION_OUTPUT_DIR at a FRESH directory is important: the valuation
 task skips when integrated_country_gep.csv already exists, so re-using the old
 output dir would hand back the pre-fix (buggy-elasticity) numbers. See
 CHANGELOG.md.
+
+Boundary rasterization now defaults to CELL-CENTRE (all_touched=False), which
+reproduces the reconciled Chiara run (~$18.24B, 161 countries). To reproduce the
+earlier all-touched run (~$18.09B, 162 countries), set GEP_EROSION_ALL_TOUCHED=true.
+A cell-centre re-run, to a fresh output dir:
+
+    export GEP_EROSION_OUTPUT_DIR=/scratch.global/damph002/erosion_cellcentre_20261026
+    export GEP_EROSION_RUN_TAG=ses11_cellcentre_20261026
+    python -m global_invest.erosion.run_erosion
 """
 import os
 
@@ -71,6 +80,13 @@ def set_erosion_paths(p):
         p.erosion_gep_input_dir, "avoided_erosion_2019_revised_feb_13.tif")
     p.erosion_country_boundary_path = os.path.join(
         p.erosion_gep_input_dir, "country_boundary_r250_with_iso3.gpkg")
+
+    # Boundary rasterization rule. Cell-centre (all_touched=False) reproduces
+    # Chiara's reconciled run (~$18.24B, 161 countries); all-touched (True) was
+    # the earlier default (~$18.09B, 162). Env-overridable: set
+    # GEP_EROSION_ALL_TOUCHED=true to restore all-touched.
+    p.erosion_rasterize_all_touched = _env(
+        "GEP_EROSION_ALL_TOUCHED", "false").strip().lower() in ("1", "true", "yes")
     return p
 
 
