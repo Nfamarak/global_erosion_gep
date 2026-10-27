@@ -19,7 +19,7 @@ This code implements the analysis described in:
 **Archived release / citation.** The exact code version accompanying the
 *Land Use Policy* revision is archived on Zenodo:
 **DOI [10.5281/zenodo.23681736](https://doi.org/10.5281/zenodo.23681736)**
-(concept DOI — always resolves to the latest version). See
+(concept DOI, always resolves to the latest version). See
 [CITATION.cff](CITATION.cff) for how to cite this software, and the
 **Data and Code Availability** section below for input-dataset sources.
 
@@ -29,7 +29,7 @@ Soil erosion by water damages cropland directly (on-farm yield loss) and
 indirectly by degrading downstream water resources and infrastructure
 fed by eroded watersheds. Vegetation and land cover regulate this by
 stabilizing soils, reducing runoff energy, and limiting sediment
-transport — a regulating ecosystem service this module quantifies as an
+transport, a regulating ecosystem service this module quantifies as an
 annual economic flow, consistent with SEEA-EA ecosystem accounting.
 
 The headline result (SES-11 baseline, 2019 USD): soil-retention services
@@ -41,7 +41,7 @@ reported for the full set of countries passing the inclusion criteria
 set). Absolute values concentrate in large agricultural economies (China,
 India, Indonesia); relative dependence (share of GDP) is highest in
 low-income, agriculture-dependent economies (Sierra Leone, Burundi,
-Liberia — each exceeding 2% of GDP).
+Liberia, each exceeding 2% of GDP).
 
 ## Corrections in this release (Land Use Policy revision)
 
@@ -83,23 +83,23 @@ erosion/
 Three sequential stages, corresponding to `erosion_functions.py`'s Sections
 A, B, and C. Equation numbers below match the manuscript.
 
-### Section A — InVEST SDR run (biophysical erosion regulation)
-Runs InVEST's Sediment Delivery Ratio (SDR) model globally — built on the
+### Section A, InVEST SDR run (biophysical erosion regulation)
+Runs InVEST's Sediment Delivery Ratio (SDR) model globally, built on the
 Revised Universal Soil Loss Equation (RUSLE) with sediment connectivity
-and delivery routing — to produce, per pixel *i*:
-- **`Actual_i`** — modelled-realized soil erosion under current land
+and delivery routing, to produce, per pixel *i*:
+- **`Actual_i`**, modelled-realized soil erosion under current land
   cover (t·ha⁻¹·yr⁻¹)
-- **`Avoided_i`** — erosion avoided due to current vegetation/land cover
+- **`Avoided_i`**, erosion avoided due to current vegetation/land cover
   vs. a degraded baseline (t·ha⁻¹·yr⁻¹)
 
 Inputs: DEM, ESA CCI land cover (2019), erodibility and erosivity rasters,
 a biophysical parameter table, and sanitized watershed boundaries.
 
-> SDR is not a site-calibrated process-based erosion model — outputs are
+> SDR is not a site-calibrated process-based erosion model, outputs are
 > spatially consistent *indicators* of erosion regulation, not exact
 > soil-loss predictions.
 
-### Section B — Prevention-share valuation
+### Section B, Prevention-share valuation
 
 **1. Severity threshold (which pixels count).** Rather than one global
 cutoff, severity is defined per country *k*:
@@ -118,7 +118,7 @@ country-conditioned rule matters: at a flat global cutoff, 80 small or
 low-lying countries would be dropped entirely despite real erosion
 vulnerability.
 
-**2. On-farm prevention share** (eq. 1) — per severe pixel *i*:
+**2. On-farm prevention share** (eq. 1), per severe pixel *i*:
 ```
 PS_i^onfarm = Avoided_i / (Avoided_i + Actual_i)      if Actual_i > T_k
 PS_i^onfarm = 0                                        otherwise
@@ -127,41 +127,41 @@ Bounded 0–1: approaches 1 where vegetation prevents nearly all potential
 soil loss, 0 where erosion is largely unmitigated. (In code: this is the
 `AE / (AE + USLE)` on-farm prevention-share raster.)
 
-**3. Upstream prevention share** (eq. 2, 2a) — per pixel *j*, using D8
+**3. Upstream prevention share** (eq. 2, 2a), per pixel *j*, using D8
 flow-routing weights `w_ij` over the hydrologically connected upstream
 contributing area Ω(j):
 ```
 UPS(j) = Σ_{i∈Ω(j)} Avoided_i · w_ij  /  Σ_{i∈Ω(j)} (Avoided_i + Actual_i) · w_ij
 ```
 This represents cumulative upstream vegetation's regulation of the
-erosive pressure *reaching* downstream cropland — not downstream
+erosive pressure *reaching* downstream cropland, not downstream
 sediment deposition or water-quality benefits, which are out of scope
 here. In this release the routing weights are derived from a
 **hydrologically conditioned HydroSHEDS flow network** (see "Corrections"
 above). Precomputed prior to integration with crop production; evaluated
 only within the severe-erosion domain.
 
-**4. Combined effective prevention** (eq. 3) — a probabilistic union that
+**4. Combined effective prevention** (eq. 3), a probabilistic union that
 avoids double-counting two independent protective pathways:
 ```
 PS_i^combined = 1 - (1 - PS_i^onfarm)(1 - PS_i^upstream)
 ```
 Country-level combined totals are therefore **not** a simple sum of
-on-farm + upstream — component means aren't directly additive because of
+on-farm + upstream, component means aren't directly additive because of
 this union formulation.
 
-**5. Crop production baseline** (eq. 4–5) — from SPAM2020 (42 crops,
+**5. Crop production baseline** (eq. 4–5), from SPAM2020 (42 crops,
 ~10 km resolution): `TotalProd_{c,i} = Yield_{c,i} × Area_{c,i}`,
 aggregated to country totals across crops and pixels.
 
-**6. Protected production** (eq. 6–8) — for each pathway
+**6. Protected production** (eq. 6–8), for each pathway
 *m ∈ {onfarm, upstream, combined}*:
 ```
 PP_{c,i}^m = PS_i^m × TotalProd_{c,i}
 Share_k^m  = PP_k^m / TotalProd_k
 ```
 
-**7. Elasticity-weighted shock share** (eq. 9) — crop-specific supply
+**7. Elasticity-weighted shock share** (eq. 9), crop-specific supply
 elasticities `ε_c` (from Sartori et al. 2019) convert protected
 *production* into protected *value*, since not all crops are equally
 yield-sensitive to erosion:
@@ -172,7 +172,7 @@ Crop names are matched to FAOSTAT exactly so every crop resolves its own
 elasticity (see "Corrections" above). (A small numerical floor prevents
 unstable near-zero values.)
 
-**8. Monetary valuation / GEP** (eq. 10) — applying the shock share to
+**8. Monetary valuation / GEP** (eq. 10), applying the shock share to
 national crop Gross Production Value (FAOSTAT, constant 2019 USD):
 ```
 GEP_k^m = GPV_k × Shock_k^m
@@ -183,7 +183,7 @@ macroeconomic interpretation:
 GDPShare_k^m = GEP_k^m / GDP_k
 ```
 
-### Section C — Maps & figures
+### Section C, Maps & figures
 Publication outputs from Section B's country-level results: global
 choropleth maps of GEP (Fisher-Jenks classification), raster previews of
 the prevention-share layers, top-N country bar charts, and the GEP-vs-GDP
@@ -196,11 +196,11 @@ smaller agriculture-dependent economies.
 Each section has a `configure_*(p)` function
 (`configure_sdr`, `configure_prevention_shares`, `configure_maps`) that
 overrides that section's module-level path/parameter constants from the
-ProjectFlow object `p` before its driver function runs — including
+ProjectFlow object `p` before its driver function runs, including
 `THRESH_LOW`/`THRESH_HIGH` (the `T_k` thresholds above),
 `SMALL_COUNTRY_AREA_KM2`, and `LOW_ELEVATION_MEAN_M`. This is how
 `run_erosion.py`'s `p.erosion_*` attributes reach the science code
-without threading a config object through every function call — see the
+without threading a config object through every function call, see the
 design note at the top of `erosion_functions.py` for why this pattern was
 chosen over refactoring the original notebooks' internals.
 
@@ -208,7 +208,7 @@ Environment overrides exposed by `run_erosion.py`:
 
 | Env var | Effect |
 |---|---|
-| `GEP_EROSION_ALL_TOUCHED` | `true`/`false` — boundary rasterization (all-touched vs cell-centre) |
+| `GEP_EROSION_ALL_TOUCHED` | `true`/`false`, boundary rasterization (all-touched vs cell-centre) |
 | `GEP_EROSION_UPS_PATH` | path to a precomputed upstream prevention-share raster (e.g. the conditioned-network re-route) |
 | `GEP_EROSION_SDR_OUTPUT_DIR`, `GEP_EROSION_OUTPUT_DIR`, `GEP_EROSION_RUN_TAG` | output locations / run tag |
 
@@ -220,7 +220,7 @@ not pip:
 conda install -c conda-forge natcap.invest=3.17.2
 ```
 
-`hazelbean` can be finicky to build — some PyPI releases have broken
+`hazelbean` can be finicky to build, some PyPI releases have broken
 metadata or Cython incompatibilities with modern Cython (3.x). If a plain
 `pip install hazelbean` fails:
 ```bash
@@ -251,14 +251,14 @@ python -m global_invest.erosion.erosion_debug_ps
 ```
 
 Both scripts set project-level paths as attributes on a `ProjectFlow`
-object (`p.erosion_*`) before executing — override these to point at your
+object (`p.erosion_*`) before executing, override these to point at your
 actual data rather than editing the science code in
 `erosion_functions.py`.
 
 ## MSI-specific setup notes
 
 If running on MSI (or any HPC system that auto-loads default environment
-modules at login), check `module list` after connecting — a default
+modules at login), check `module list` after connecting, a default
 Python module can shadow your intended conda environment's `PATH` entry
 even after `conda activate <env>`. If `which python` doesn't point into
 your env's own `bin/` directory after activating, add to `~/.bashrc`
@@ -268,7 +268,7 @@ module unload <default-module-name> 2>/dev/null
 ```
 
 Global SDR runs and the crop-band aggregation step in Section B are
-genuinely long-running (multiple hours) and memory-heavy — submit as an
+genuinely long-running (multiple hours) and memory-heavy, submit as an
 `sbatch` batch job rather than an interactive session, and make sure the
 batch script explicitly sources conda's shell init before activating an
 environment:
@@ -283,14 +283,14 @@ silently fall through to the base environment otherwise).
 
 All primary datasets are publicly available from their original providers:
 
-- **Crop production (harvested area, yield, production):** SPAM2020 (IFPRI, 2024) — <https://doi.org/10.7910/DVN/SWPENT>
-- **Crop gross production value:** FAOSTAT (FAO, 2019) — <https://www.fao.org/faostat>
-- **National GDP:** World Bank (2019) — <https://data.worldbank.org>
+- **Crop production (harvested area, yield, production):** SPAM2020 (IFPRI, 2024), <https://doi.org/10.7910/DVN/SWPENT>
+- **Crop gross production value:** FAOSTAT (FAO, 2019), <https://www.fao.org/faostat>
+- **National GDP:** World Bank (2019), <https://data.worldbank.org>
 - **Erosion–yield elasticities:** Sartori et al. (2019)
 - **Land cover:** ESA Climate Change Initiative Land Cover (2019)
 - **Rainfall erosivity, soil erodibility, DEM:** as cited in the manuscript
-- **Erosion model:** InVEST SDR v3.17.2 (Natural Capital Alliance, 2026) — <https://doi.org/10.60793/NATCAP-INVEST-3.17.2>
-- **Conditioned flow-direction network (upstream routing):** HydroSHEDS v1.1 (Lehner et al., 2008) — <https://www.hydrosheds.org>
+- **Erosion model:** InVEST SDR v3.17.2 (Natural Capital Alliance, 2026), <https://doi.org/10.60793/NATCAP-INVEST-3.17.2>
+- **Conditioned flow-direction network (upstream routing):** HydroSHEDS v1.1 (Lehner et al., 2008), <https://www.hydrosheds.org>
 
 This analysis code is archived at Zenodo
 (**[10.5281/zenodo.23681736](https://doi.org/10.5281/zenodo.23681736)**).
@@ -299,7 +299,7 @@ manuscript's Supplementary Information.
 
 ## License
 
-Released under the MIT License — see [LICENSE](LICENSE). (If/when this
+Released under the MIT License, see [LICENSE](LICENSE). (If/when this
 module is merged into `NatCapTEEMs/global_invest_dev`, align the license
 with that repository's convention.)
 
@@ -313,5 +313,5 @@ with that repository's convention.)
   in `configure_prevention_shares(p)`, since the manuscript reports it as
   a formal sensitivity analysis, not just an alternate default.
 - Several generic raster/plotting helpers in `erosion_utils.py` are
-  likely duplicated across other GEP contributors' code — candidates for
+  likely duplicated across other GEP contributors' code, candidates for
   a future shared `global_invest.utils` or upstreaming into `hazelbean`.
