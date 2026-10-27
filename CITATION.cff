@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software (via its Zenodo DOI) and the associated article."
+title: "global_erosion_gep: Global soil-erosion Gross Ecosystem Product account"
+version: v1.0.1-LUP
+date-released: 2026-10-27
+doi: 10.5281/zenodo.23681736
+url: "https://github.com/Nfamarak/global_erosion_gep"
+repository-code: "https://github.com/Nfamarak/global_erosion_gep"
+license: MIT
+type: software
+authors:
+  - family-names: Dampha
+    given-names: Nfamara K.
+    affiliation: "Department of Applied Economics, Natural Capital Alliance – The Earth-Economy Modelers (NatCap TEEMs), University of Minnesota"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"   # add your ORCID here
+  - family-names: Johnson
+    given-names: Justin
+    affiliation: "Department of Applied Economics, University of Minnesota"
+keywords:
+  - soil erosion
+  - ecosystem services
+  - natural capital accounting
+  - gross ecosystem product
+  - InVEST SDR
+  - sediment retention
+preferred-citation:
+  type: article
+  title: "How much crop production does nature protect from soil erosion? A global ecosystem-service account"
+  authors:
+    - family-names: Dampha
+      given-names: Nfamara K.
+    - family-names: Johnson
+      given-names: Justin
+  journal: "Land Use Policy"
+  year: 2026
+  notes: "Under review (major revision); manuscript LUP-D-26-02970."

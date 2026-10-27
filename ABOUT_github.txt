@@ -1,0 +1,7 @@
+GitHub "About" field (paste into repo → About ⚙ → Description):
+
+Global soil-erosion Gross Ecosystem Product (GEP) account: values the economic
+contribution of erosion prevention to crop production by decomposing on-farm and
+upstream watershed protection. InVEST SDR → prevention-share GEP valuation by
+country. Code for Dampha & Johnson, Land Use Policy (LUP-D-26-02970). Archived:
+10.5281/zenodo.23681736
