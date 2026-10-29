@@ -1,0 +1,35 @@
+# Conda environment for the GEP erosion soil-retention module.
+#
+#   conda env create -f environment.yml
+#   conda activate gep_erosion
+#
+# On MSI this is the same stack as the existing gep_InVEST environment. Unlike
+# the flood module, erosion DOES run an InVEST model (SDR), so natcap.invest is
+# required for Section A. If you already have gep_InVEST, use that and skip this.
+#
+# hazelbean is pip-only and can be awkward to build; see the module README if
+# the pip line below fails.
+name: gep_erosion
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - scipy
+  - gdal
+  - rasterio
+  - rioxarray
+  - xarray
+  - geopandas
+  - shapely
+  - pyogrio
+  - fiona
+  - matplotlib
+  - mapclassify
+  - openpyxl
+  - pip
+  - pip:
+      - natcap.invest
+      - hazelbean
