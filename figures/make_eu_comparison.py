@@ -430,6 +430,42 @@ def _fig10_country(df, outfile):
     return outfile
 
 
+def _fig10_panagos_topn(df, outfile, n=15):
+    """Fig 10 (focused): top-n EU countries by Panagos loss, SES-11 vs Panagos only."""
+    from matplotlib.ticker import FuncFormatter
+    d = df.dropna(subset=["Panagos_million_USD_2019"]).sort_values(
+        "Panagos_million_USD_2019", ascending=False).head(n).sort_values(
+        "Panagos_million_USD_2019", ascending=True)
+    y = np.arange(len(d))
+    hh = 0.40
+    fig, ax = plt.subplots(figsize=(9.0, 8.4))
+    ax.barh(y + hh / 2, d["Panagos_million_USD_2019"], hh, color=C_PAN,
+            label="Panagos (2018) erosion crop-loss")
+    ax.barh(y - hh / 2, d["GEP_SES11_million_USD_2019"], hh, color=C_SES,
+            label="Erosion-regulation service value (SES-11)")
+    ax.set_yticks(y)
+    ax.set_yticklabels(d["Country"])
+    ax.set_xlabel("Million USD (2019)")
+    ax.set_title(f"Top {n} EU countries by Panagos erosion crop-loss:\n"
+                 f"erosion-regulation service value (SES-11) vs Panagos (2018)", fontsize=12, pad=10)
+    ax.legend(frameon=False, loc="lower right", fontsize=10)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.grid(axis="x", color="#e6e6e6", lw=0.8)
+    ax.set_axisbelow(True)
+    ax.margins(y=0.01)
+    tp = float(d["Panagos_million_USD_2019"].sum())
+    ts = float(d["GEP_SES11_million_USD_2019"].sum())
+    ax.text(0.97, 0.40, f"Shown-set totals ($M)\nPanagos: {tp:,.0f}\n"
+            f"SES-11:  {ts:,.0f}  ({ts/tp:.2f}x)", transform=ax.transAxes,
+            ha="right", va="center", fontsize=9.5, family="monospace",
+            bbox=dict(boxstyle="round,pad=0.5", fc="#f7f7f7", ec="#cccccc"))
+    fig.tight_layout()
+    fig.savefig(outfile, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return outfile
+
+
 def _fig10_diverging(df, outfile):
     """Companion: SES-11 minus Panagos per country (who exceeds / falls short)."""
     d = df.dropna(subset=["Panagos_million_USD_2019"]).copy()
@@ -454,7 +490,9 @@ def _fig10_diverging(df, outfile):
 def make_figures(df, have_panagos):
     outs = []
     if have_panagos:
-        # Primary manuscript Figure 10 (+ diverging companion)
+        # Primary manuscript Figure 10 (focused top-15, SES-11 vs Panagos only)
+        outs.append(_fig10_panagos_topn(df, FIG_DIR / "Fig10_panagos_top15_SES11.png", n=15))
+        # Full EU-27 variant (SES-11 vs Panagos, all countries with a Panagos value)
         outs.append(_fig10_country(df, FIG_DIR / "Fig10_EU27_country_comparison.png"))
         outs.append(_fig10_diverging(df, FIG_DIR / "Fig10b_EU27_diverging.png"))
         outs.append(_grouped_bar(df, True, "EU-27: Panagos loss vs erosion-regulation service value",
