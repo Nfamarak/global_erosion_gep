@@ -9,8 +9,12 @@ than at the native SDR resolution.
 
 The accounting grid is defined by a template raster -- the baseline erosion raster
 `usle_2019_revised_feb_13.tif` -- which fixes the CRS, pixel size, extent and pixel
-alignment (EPSG:8857 Equal Earth, ~6.45 km; equal-area is required because the
-pipeline converts t ha-1 yr-1 to tonnes per pixel). Pass that raster as --template.
+alignment. Confirmed grid: EPSG:3857 (Web Mercator), 6,446.75 m, 6217 x 3968. Pass
+that raster as --template so the output grid is reproduced exactly.
+NOTE: the valuation then reprojects these rasters to the equal-area Equal Earth
+projection (EPSG:8857) before the per-pixel-area / tonnes conversion
+(erosion_functions.py: ANALYSIS_EPSG = 8857), so the monetary account is area-correct
+even though this stored/resampled grid is Web Mercator.
 
 Resampling method: USLE and avoided erosion are INTENSIVE quantities (t ha-1 yr-1),
 so they are resampled by AREA-WEIGHTED AVERAGE (rasterio Resampling.average). This is
