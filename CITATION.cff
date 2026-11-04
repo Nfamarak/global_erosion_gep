@@ -17,6 +17,9 @@ authors:
     given-names: Justin
     affiliation: "Department of Applied Economics, University of Minnesota"
     orcid: "https://orcid.org/0000-0001-9903-1787"
+  - family-names: Colesanti Senni
+    given-names: Chiara
+    affiliation: "University of Zurich"
 keywords:
   - soil erosion
   - ecosystem services
@@ -32,6 +35,8 @@ preferred-citation:
       given-names: Nfamara K.
     - family-names: Johnson
       given-names: Justin
+    - family-names: Colesanti Senni
+      given-names: Chiara
   journal: "Land Use Policy"
   year: 2026
   notes: "Under review (major revision); manuscript LUP-D-26-02970."
