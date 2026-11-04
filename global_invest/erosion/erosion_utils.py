@@ -1,17 +1,9 @@
 # =============================================================================
 # erosion_utils.py
 #
-# Generic, non-erosion-specific helper functions pulled out of the three
-# original research notebooks (step1_sdr_invest_run, Combine_PS_SES,
-# combined_maps_figures). Per Justin's 2026-07-07 email, these are the
-# kind of raster-IO / reprojection / zonal-stat / plotting helpers that
-# other GEP service modules re-implement too, and are the first
-# candidates to be pulled up into a shared global_invest.utils (or
-# hazelbean) once the group compares notes.
-#
-# NOTE: assert_exists() below was defined 3x, identically, across the
-# original notebooks (SDR script called its copy `_assert_exists`) --
-# consolidated here to a single implementation.
+# Generic, non-erosion-specific helpers (raster IO, reprojection, zonal
+# statistics, plotting) shared across the module's three stages. These are
+# candidates to be pulled up into a shared global_invest.utils (or hazelbean).
 # =============================================================================
 import os
 import gc

@@ -1,5 +1,22 @@
 # Changelog
 
+## Revision — harmonized per-crop valuation (2026-11)
+- New valuation mode `GEP_EROSION_VALUATION_MODE=percrop` aligns the erosion
+  account with the common GTAP-InVEST `crop_provision` per-crop values and removes
+  the within-country tonnes-weighted aggregation approximation. Default behaviour
+  (`shock_x_gpv`) is unchanged. See `global_invest/erosion/CHANGELOG.md` for the
+  full specification (value table, FAO->SPAM correspondence, pooled-code split,
+  `in_crop_provision_account` byproduct exclusion).
+- `run_erosion.py` gains `GEP_EROSION_TASK_TREE` (full | calculation | **valuation** |
+  **value_from_shares** | results) so the valuation can be re-run without re-running InVEST
+  SDR — and `value_from_shares` re-values a completed run's per-crop shares in seconds
+  (no biophysical recompute at all) — plus
+  `GEP_EROSION_PERCROP_VALUE_CSV`, `GEP_EROSION_FAO_SPAM_CROSSWALK_CSV`, and
+  `GEP_EROSION_ELEVATION_PATH` hooks. Launchers added under `sbatch/`
+  (`rerun_cropfix_valonly.sbatch`, `rerun_allcorrections_valonly.sbatch`).
+- Loaders are BOM-safe (`utf-8-sig`) so a BOM in the correspondence/value CSV no
+  longer triggers a silent fallback to the embedded crosswalk.
+
 ## Revised run — finer hydrologically conditioned DEM (2026-10)
 - The account is recomputed on a hydrologically conditioned ~1 km DEM
   (HydroSHEDS-conditioned) in place of the coarse ~6.45 km aggregated routing.
@@ -18,6 +35,15 @@
 - Added `conditioned_inputs/` (HydroSHEDS acquisition, `remap_flowdir.py`,
   `upstream_conditioned.py`), `sbatch/` templates, `figures/make_erosion_gep_figures.py`,
   and `validation/` (Danube/Elbe routing check vs HydroRIVERS, SI Fig. S10).
+- Added `conditioned_inputs/resample_sdr_to_accounting_grid.py` and documented it as
+  pipeline stage 3. The InVEST SDR runs at ~1 km but the account is tallied on the
+  ~6.45 km equal-area accounting grid defined by `usle_2019_revised_feb_13.tif`; this
+  step area-average-resamples (`Resampling.average`, correct for intensive t ha-1 yr-1
+  rasters) the `usle`/`avoided_erosion` outputs onto that template before valuation.
+  Previously this resampling was only an un-committed manual pre-step (the MSI
+  `sdr_on_feb_grid/` outputs), so a clone could silently value at native ~1 km; the
+  valuation's own internal reproject keeps native resolution, so this explicit stage
+  is required to reproduce the headline grid.
 
 ## Earlier
 - Corrected crop erosion-yield elasticity handling (see

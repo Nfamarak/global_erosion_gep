@@ -1,15 +1,18 @@
 """
-CORRECTED BUILD 2026-08-27 - erosion GEP account (soil-retention service).
-Fix: elasticity crop-name matching (SPAM_ALIAS_MAP) now uses exact FAOSTAT item
-names; see CHANGELOG.md. All other logic is unchanged from the submitted pipeline.
+Erosion GEP account (soil-retention service) -- science functions.
+
+Computes the erosion-regulation service value (ERSV): the share of national crop
+production value protected by vegetation's soil-retention, from InVEST SDR
+biophysical layers, on-farm + upstream prevention shares, and a crop-value
+valuation. See README.md for the method and CHANGELOG.md for the revision history.
 """
 # =============================================================================
 # erosion_functions.py
 #
 # Key science functions for the GEP erosion / sediment retention service.
 # Follows the same run_x.py / x_tasks.py / x_functions.py / x_initialize.py
-# structure Justin described (2026-07-07 email) for the terrestrial_carbon
-# module. Three original scripts are represented here as three sections:
+# structure used across global_invest service modules (e.g. terrestrial_carbon).
+# The module is organised in three sections:
 #
 #   A) InVEST SDR run              (from step1_sdr_invest_run.ipynb)
 #   B) On-farm + upstream erosion   (from Combine_PS_SES11_3_3_2026.ipynb)
@@ -17,18 +20,14 @@ names; see CHANGELOG.md. All other logic is unchanged from the submitted pipelin
 #   C) Maps & figures               (from combined_maps_figures_SES.ipynb)
 #
 # Generic raster/plotting helpers reused across all three (and likely
-# duplicated in other people's GEP code, per Justin's email) live in
-# erosion_utils.py instead and are imported by name below.
+# shared with other GEP service modules) live in erosion_utils.py instead
+# and are imported by name below.
 #
-# DESIGN NOTE ON CONFIG: the original notebooks hardcoded all paths/knobs
-# as module-level constants (each script had its own ROOT). To keep the
-# original, working science logic byte-for-byte intact (rather than risk
-# introducing bugs while threading a config object through ~40 nested
-# references), each section keeps its constants as module-level globals
-# with the *same defaults the original notebooks used*, and exposes a
-# `configure_*(p)` function that a task calls first to override any of
-# them from the ProjectFlow object `p`. This mirrors how run_erosion.py
-# sets p.erosion_* attributes, the same pattern used in run_terrestrial_carbon.py.
+# DESIGN NOTE ON CONFIG: each section keeps its paths/knobs as module-level
+# globals and exposes a `configure_*(p)` function that a task calls first to
+# override any of them from the ProjectFlow object `p`. This is how
+# run_erosion.py's p.erosion_* attributes reach the science code without
+# threading a config object through every function call.
 # =============================================================================
 from __future__ import annotations
 
@@ -451,13 +450,10 @@ RESAMPLE_DEM        = Resampling.average
 # 3) Elasticity loader (with SPAM support)
 # ==========================================================
 # ---------------------------------------------------------------------------
-# CORRECTED 2026-08-27 (elasticity name-matching fix).
-# The previous alias list used short crop names ("maize", "potato", "sugarcane")
-# that never exact-matched the FAOSTAT item names in the elasticity table
-# ("Maize (corn)", "Potatoes", "Sugar cane"), so 19 of 46 crops silently took
-# the 0.08 fallback -- most importantly maize (true elasticity 0.30). Each entry
-# below now lists the exact FAO item name FIRST, with the old short names kept as
-# backups. See CHANGELOG.md for the results impact.
+# Maps each SPAM crop to its FAOSTAT item name(s) for the elasticity lookup.
+# The exact FAOSTAT item name ("Maize (corn)", "Potatoes", "Sugar cane") is
+# listed FIRST so it exact-matches the elasticity table's keys; shorter aliases
+# follow as fallbacks. A crop with no table entry takes the 0.08 default.
 # ---------------------------------------------------------------------------
 SPAM_ALIAS_MAP = {
     "whea": ["wheat"],
@@ -663,42 +659,144 @@ def compute_country_mean_elevation(
 # ==========================================================
 # 5) FAO GPV loader + crops-only filter + fallback
 # ==========================================================
+# FAOSTAT "Crops" aggregate (item group 2041): the crop item codes present in the
+# Value-of-Production (QV) input. Crops are selected by FAOSTAT item code (exact
+# and reproducible); a name-based filter is kept only as a fallback below.
+CROP_ITEM_CODES_2041 = frozenset({
+    15, 27, 44, 56, 71, 75, 79, 83, 89, 92, 94, 97, 101, 103, 108, 116, 122, 125, 135, 136,
+    137, 149, 156, 157, 176, 181, 187, 191, 195, 197, 201, 203, 205, 210, 211, 216, 217, 220,
+    221, 222, 223, 225, 226, 234, 236, 242, 249, 254, 260, 263, 265, 267, 270, 275, 280, 289,
+    292, 296, 328, 333, 339, 358, 366, 367, 372, 373, 388, 393, 394, 397, 399, 401, 402, 403,
+    406, 407, 414, 417, 420, 423, 426, 430, 446, 449, 461, 463, 486, 489, 490, 495, 497, 507,
+    512, 515, 521, 523, 526, 530, 531, 534, 536, 541, 544, 547, 549, 550, 552, 554, 558, 560,
+    567, 568, 569, 571, 572, 574, 577, 587, 592, 600, 603, 619, 656, 661, 667, 671, 677, 687,
+    689, 692, 693, 698, 702, 711, 720, 723, 780, 789, 800, 809, 821, 826, 836,
+})
+
+
 def _filter_crops_only(df: pd.DataFrame) -> pd.DataFrame:
-    cols = df.columns
-    item_col = "item" if "item" in cols else ("item name" if "item name" in cols else None)
-    group_col = "domain" if "domain" in cols else None
-    if not item_col and not group_col:
-        warnings.warn("FAO GPV: no item/domain labels; cannot restrict to crops — using all rows.")
+    cols = {c.lower(): c for c in df.columns}
+    code_col = next((cols[c] for c in
+                     ("item_code_fao", "item code", "item_code", "item code (fao)") if c in cols), None)
+    # Primary path: exact FAOSTAT group-2041 selection by item code.
+    if code_col is not None:
+        codes = pd.to_numeric(df[code_col], errors="coerce")
+        out = df[codes.isin(CROP_ITEM_CODES_2041)].copy()
+        if not out.empty:
+            return out
+        warnings.warn("FAO GPV: no rows matched the crop item-code allowlist (group 2041); "
+                      "falling back to the name filter.")
+    # Fallback (no usable item-code column): keep crops by excluding animal products by name.
+    item_col = cols.get("item") or cols.get("item name") or cols.get("item_name")
+    if item_col is None:
+        warnings.warn("FAO GPV: no item code or name column; using all rows.")
         return df
+    s = df[item_col].astype(str).str.lower()
+    noncrop = s.str.contains(
+        r"\b(?:meat|offal|fat|lard|tallow|egg|milk|dairy|cheese|butter|cream|whey|honey|"
+        r"beeswax|wool|hair|hide|skin|silk|cocoon|snail|game|live animals)\b",
+        na=False, regex=True)
+    out = df[~noncrop].copy()
+    return out if not out.empty else df
 
-    def _s(s): return s.astype(str).str.lower()
+# ==========================================================
+# Per-crop valuation
+# ==========================================================
+# Valuation mode: "percrop" (default -- the harmonized headline: ERSV_k = sum_c
+# value_usd[c,k] x share_protected[c,k] x elasticity[c], with per-crop values from the
+# common crop_provision table mapped to SPAM crops via the FAO->SPAM correspondence) or
+# "shock_x_gpv" (elasticity-weighted shock x total national crop GPV).
+VALUATION_MODE = "percrop"
+# Per-crop crop value table (common crop_provision pipeline, production x price, 2019 USD, with
+# an in_crop_provision_account flag). Only in-account rows are used.
+PERCROP_VALUE_CSV = IN_DIR / "fao_values_2019_production_x_price.csv"
+# FAO item -> SPAM crop correspondence (GTAP/crop_provision table: fao_item_code +
+# spam2020_crop_label, or the simple item_code_fao + spam_crop form). Overrides the embedded
+# CROP_ITEM_CODE_TO_SPAM below; pooled FAO codes (one item -> several SPAM crops) are allowed.
+FAO_SPAM_CROSSWALK_CSV = IN_DIR / "fao_item_spam2020_crop_correspondence.csv"
 
-    include = pd.Series(False, index=df.index)
-    if item_col:
-        s = _s(df[item_col])
-        include = include | s.str.contains(r"\bcrop", na=False)
-        include = include | s.str.contains(
-            "apple|apricot|barley|bean|cabbage|carrot|cereal|cherr|chilli|cocoa|coffee|cotton|"
-            "cucumber|date|eggplant|fig|fruit|grape|lentil|maize|melon|millet|nut|oat|onion|pea|peanut|"
-            "pepper|potato|rice|rye|sesame|sorghum|soy|sunflower|tomato|vegetable|wheat|yuca|cassava",
-            na=False
-        )
-    if group_col:
-        s = _s(df[group_col])
-        include = include | s.str.contains(r"\bcrop", na=False)
+# Valuation-from-shares inputs (used only by the value_from_shares task tree): an existing
+# run's country_crop_protected_production_long.csv to re-value, and that run's
+# integrated_country_gep.csv to carry non-valuation context columns through.
+SHARES_LONG_CSV = None
+BASELINE_INTEGRATED_CSV = None
 
-    neg = pd.Series(False, index=df.index)
-    for col in [c for c in [item_col, group_col] if c]:
-        s = _s(df[col])
-        neg = neg | s.str.contains("livestock|animal|fish|fisher|forestry|forest", na=False)
-        neg = neg | (s.str.contains("agriculture", na=False) & ~s.str.contains("crop", na=False))
-        neg = neg | s.str.contains("crops? and livestock", na=False)
+# FAOSTAT item_code -> SPAM crop (the erosion SPAM set). Animal-product codes are absent
+# (dropped); crop codes not individually mapped resolve to "rest".
+CROP_ITEM_CODE_TO_SPAM = {
+    15:'whea',27:'rice',44:'barl',56:'maiz',71:'ocer',75:'ocer',79:'mill',83:'sorg',89:'ocer',92:'ocer',
+    94:'ocer',97:'ocer',101:'ocer',103:'ocer',108:'ocer',116:'pota',122:'swpo',125:'cass',135:'orts',136:'orts',
+    137:'yams',149:'orts',156:'sugc',157:'sugb',176:'bean',181:'opul',187:'opul',191:'chic',195:'cowp',197:'pige',
+    201:'lent',203:'opul',205:'opul',210:'opul',211:'opul',216:'rest',217:'rest',220:'rest',221:'rest',222:'rest',
+    223:'rest',225:'rest',226:'rest',234:'rest',236:'soyb',242:'grou',249:'cnut',254:'oilp',260:'ooil',263:'ooil',
+    265:'ooil',267:'sunf',270:'rape',275:'ooil',280:'ooil',289:'sesa',292:'ooil',296:'ooil',328:'cott',333:'ooil',
+    339:'ooil',358:'vege',366:'vege',367:'vege',372:'vege',373:'vege',388:'toma',393:'vege',394:'vege',397:'vege',
+    399:'vege',401:'vege',402:'onio',403:'onio',406:'vege',407:'vege',414:'vege',417:'vege',420:'vege',423:'vege',
+    426:'vege',430:'vege',446:'vege',449:'vege',461:'rest',463:'vege',486:'bana',489:'plnt',490:'citr',495:'citr',
+    497:'citr',507:'citr',512:'citr',515:'temf',521:'temf',523:'temf',526:'temf',530:'temf',531:'temf',534:'temf',
+    536:'temf',541:'temf',544:'temf',547:'temf',549:'temf',550:'temf',552:'temf',554:'temf',558:'temf',560:'temf',
+    567:'trof',568:'trof',569:'trof',571:'trof',572:'trof',574:'trof',577:'trof',587:'temf',592:'temf',600:'trof',
+    603:'trof',619:'rest',656:'coff',661:'coco',667:'teas',671:'rest',677:'rest',687:'rest',689:'rest',692:'rest',
+    693:'rest',698:'rest',702:'rest',711:'rest',720:'rest',723:'rest',780:'ofib',789:'ofib',800:'ofib',809:'ofib',
+    821:'ofib',826:'toba',836:'rubb',
+}
 
-    out = df[include & ~neg].copy()
-    if out.empty:
-        warnings.warn("FAO GPV: crops-only filter removed all rows — falling back to original dataset.")
-        return df
-    return out
+
+def load_fao_spam_crosswalk(path: Path) -> pd.DataFrame:
+    """FAO item_code -> SPAM crop correspondence as a long table [item_code_fao, crop].
+    Accepts the GTAP/crop_provision correspondence (columns fao_item_code + spam2020_crop_label,
+    with a 'rule' column whose 'not_a_crop' rows are dropped) or the simple form
+    (item_code_fao + spam_crop). A single FAO code may map to more than one SPAM crop (pooled,
+    e.g. millet -> mill+pmil, coffee -> coff+rcof); the caller splits such value by SPAM tonnes.
+    Falls back to the embedded CROP_ITEM_CODE_TO_SPAM (1:1) if the CSV is missing/unreadable."""
+    try:
+        p = Path(path)
+        if p.exists():
+            x = pd.read_csv(p, encoding="utf-8-sig")
+            x.columns = [c.strip().lstrip("﻿").lower() for c in x.columns]
+            code = next((c for c in ("item_code_fao", "fao_item_code") if c in x.columns), None)
+            spam = next((c for c in ("spam_crop", "spam2020_crop_label") if c in x.columns), None)
+            if code and spam:
+                if "rule" in x.columns:
+                    x = x[x["rule"].astype(str).str.strip() != "not_a_crop"]
+                out = x[[code, spam]].rename(columns={code: "item_code_fao", spam: "crop"})
+                out["item_code_fao"] = pd.to_numeric(out["item_code_fao"], errors="coerce")
+                out = out.dropna(subset=["item_code_fao"]).copy()
+                out["item_code_fao"] = out["item_code_fao"].astype(int)
+                out["crop"] = out["crop"].astype(str).str.strip()
+                out = out[out["crop"] != ""].drop_duplicates()
+                if len(out):
+                    return out[["item_code_fao", "crop"]]
+            warnings.warn(f"FAO-SPAM crosswalk {p} lacks usable columns; using embedded map.")
+    except Exception as e:
+        warnings.warn(f"FAO-SPAM crosswalk unreadable ({e}); using embedded map.")
+    return pd.DataFrame({"item_code_fao": list(CROP_ITEM_CODE_TO_SPAM.keys()),
+                         "crop": list(CROP_ITEM_CODE_TO_SPAM.values())})
+
+
+def load_cropprov_percrop_values(path: Path) -> pd.DataFrame:
+    """Per-crop crop value from the common crop_provision pipeline, by FAO item.
+    Returns [iso3, item_code_fao, value_usd]. When the table carries an
+    'in_crop_provision_account' flag, only in-account rows are kept (so byproducts and
+    no-price items the common account excludes, e.g. cotton seed / palm kernels, are dropped
+    at source). value_usd is current-2019 USD (production x price)."""
+    assert_exists(path, "Provide crop-provision per-crop value CSV (percrop valuation mode).")
+    df = pd.read_csv(path, low_memory=False, encoding="utf-8-sig")
+    df.columns = [c.strip().lstrip("﻿").lower() for c in df.columns]
+    need = {"iso3", "item_code_fao", "value_usd"}
+    miss = need - set(df.columns)
+    if miss:
+        raise ValueError(f"per-crop value CSV missing {miss}; found {list(df.columns)}")
+    if "in_crop_provision_account" in df.columns:
+        keep = df["in_crop_provision_account"].astype(str).str.strip().str.lower().isin(["true", "1", "yes"])
+        df = df[keep]
+    df["iso3"] = df["iso3"].astype(str).str.upper()
+    df["item_code_fao"] = pd.to_numeric(df["item_code_fao"], errors="coerce")
+    df["value_usd"] = pd.to_numeric(df["value_usd"], errors="coerce").fillna(0.0)
+    df = df.dropna(subset=["item_code_fao"]).copy()
+    df["item_code_fao"] = df["item_code_fao"].astype(int)
+    return df.groupby(["iso3", "item_code_fao"], as_index=False)["value_usd"].sum()
+
 
 def load_fao_prices_full(path: Path) -> pd.DataFrame:
     assert_exists(path, "Provide prices CSV for GPV fallback.")
@@ -749,6 +847,10 @@ def load_fao_gpv_iso3_const2019_with_fallback(
     fao_out = fao_out[["iso3","crop_gpv_const2019_2019"]]
 
     prices = load_fao_prices_full(prices_full_csv)
+    # Drop exact-duplicate rows before averaging fallback prices. The input has 80 fully
+    # identical crop records (52 CHE + 28 SRB) that would otherwise double-weight those
+    # countries' fallback price means.
+    prices = prices.drop_duplicates()
     key = "item_code_fao" if "item_code_fao" in prices.columns else "item_name"
 
     if (prices["iso3"] == "*").any():
@@ -959,11 +1061,61 @@ def compute_country_gep_from_country_crop(
     agg.loc[mpos, "erosion_shock_share"] = MIN_SHOCK_FLOOR
     agg = agg.rename(columns={"ISO3":"iso3"})
 
-    fao = load_fao_gpv_iso3_const2019_with_fallback(fao_iso3_csv, prices_full_csv, base_year=base_year)
     gdp = load_wb_gdp_current_2019(gdp_current_2019_csv)
 
-    out = phys.merge(agg[["iso3","erosion_shock_share"]], on="iso3", how="left").merge(fao, on="iso3", how="left").merge(gdp, on="iso3", how="left")
-    out["gep_const2019_usd"] = out["crop_gpv_const2019_2019"].fillna(0.0) * out["erosion_shock_share"].fillna(0.0)
+    if VALUATION_MODE == "percrop":
+        # Per-crop valuation: value each crop's protected production at its own crop
+        # value and sum to the national total,
+        #   ERSV_k = sum_c value_usd[c,k] x share_protected[c,k] x elasticity[c].
+        # value_usd is the per-crop value from the common crop_provision table
+        # (in_crop_provision_account rows only, so byproducts / no-price items are
+        # excluded at source). FAO items map to SPAM crops via the correspondence; a
+        # pooled FAO code (one item -> several SPAM crops) has its value split across
+        # them by SPAM production tonnes.
+        val_item = load_cropprov_percrop_values(PERCROP_VALUE_CSV)   # [iso3, item_code_fao, value_usd]
+        xw = load_fao_spam_crosswalk(FAO_SPAM_CROSSWALK_CSV)          # [item_code_fao, crop] (pooled=multi)
+        d = df_country_crop_component.rename(columns={"ISO3": "iso3"}).copy()
+        for c in ["share_protected_production", "elasticity_used", "total_production_tons"]:
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+        # map FAO-item value -> SPAM crop; split pooled codes (one FAO item -> several SPAM
+        # crops) across those crops in proportion to their SPAM production tonnes.
+        prod = d[["iso3", "crop", "total_production_tons"]].drop_duplicates()
+        vx = val_item.merge(xw, on="item_code_fao", how="left")
+        vx["crop"] = vx["crop"].fillna("rest")
+        vx = vx.merge(prod, on=["iso3", "crop"], how="left")
+        vx["w"] = vx["total_production_tons"].fillna(0.0)
+        gb = vx.groupby(["iso3", "item_code_fao"])
+        vx["wsum"] = gb["w"].transform("sum")
+        vx["n"] = gb["crop"].transform("size")
+        vx["frac"] = np.where(vx["wsum"] > 0, vx["w"] / vx["wsum"], 1.0 / vx["n"])
+        vx["value_split"] = vx["value_usd"] * vx["frac"]
+        vals = (vx.groupby(["iso3", "crop"], as_index=False)["value_split"].sum()
+                  .rename(columns={"value_split": "value_usd"}))
+        d = d.merge(vals, on=["iso3", "crop"], how="left")
+        d["value_usd"] = d["value_usd"].fillna(0.0)
+        d["gep_c"] = (d["value_usd"]
+                      * d["share_protected_production"].clip(0.0, 1.0)
+                      * d["elasticity_used"].clip(0.0, 1.0))
+        gep_by_iso = (d.groupby("iso3", as_index=False)["gep_c"].sum()
+                        .rename(columns={"gep_c": "gep_const2019_usd"}))
+        cropval = (vals.groupby("iso3", as_index=False)["value_usd"].sum()
+                       .rename(columns={"value_usd": "crop_gpv_const2019_2019"}))
+        out = (phys.merge(gep_by_iso, on="iso3", how="left")
+                   .merge(cropval, on="iso3", how="left")
+                   .merge(gdp, on="iso3", how="left"))
+        # emergent shock (reporting only) = GEP / gross crop value
+        out["erosion_shock_share"] = np.where(
+            out["crop_gpv_const2019_2019"] > 0,
+            out["gep_const2019_usd"] / out["crop_gpv_const2019_2019"], np.nan)
+        # a country with no crop-provision crop value has an undefined (not zero) account
+        out.loc[~(out["crop_gpv_const2019_2019"] > 0), "gep_const2019_usd"] = np.nan
+    else:
+        fao = load_fao_gpv_iso3_const2019_with_fallback(fao_iso3_csv, prices_full_csv, base_year=base_year)
+        out = phys.merge(agg[["iso3","erosion_shock_share"]], on="iso3", how="left").merge(fao, on="iso3", how="left").merge(gdp, on="iso3", how="left")
+        # Preserve missing crop values as missing GEP (do not coerce to 0): a country with no
+        # usable crop GPV has an undefined, not zero, monetary account. Affects 10 territories
+        # (AND, GUF, GLP, XKX, LIE, MTQ, MCO, SMR, ESH, ALA) in reporting; no effect on the total.
+        out["gep_const2019_usd"] = out["crop_gpv_const2019_2019"] * out["erosion_shock_share"]
     out["gdp_loss_pct"] = np.where(
         out["gdp_const2019_2019"].notna() & (out["gdp_const2019_2019"] > 0),
         100.0 * out["gep_const2019_usd"] / out["gdp_const2019_2019"],
@@ -1298,6 +1450,8 @@ def integrate_and_write():
         "run_tag": RUN_TAG,
         "analysis_epsg": ANALYSIS_EPSG,
         "apply_severe_filter": APPLY_SEVERE_FILTER,
+        "valuation_mode": VALUATION_MODE,
+        "percrop_value_csv": str(PERCROP_VALUE_CSV) if VALUATION_MODE == "percrop" else None,
         "threshold_high_t_ha_yr": THRESH_HIGH,
         "threshold_low_t_ha_yr": THRESH_LOW,
         "small_country_area_km2": SMALL_COUNTRY_AREA_KM2,
@@ -1377,6 +1531,105 @@ Elapsed minutes: {manifest['elapsed_minutes']}
     print(f"Manifest → {OUT_DIR / 'manifest.json'}")
 
 
+def integrate_and_write_from_shares():
+    """Valuation-only from an EXISTING run's per-crop protected-production long table
+    (SHARES_LONG_CSV), with NO biophysical recompute. Values each component with the
+    same compute_country_gep_from_country_crop() the full pipeline uses, so the result
+    is identical to re-running valuation on that run's shares. Non-valuation context
+    columns (country_name, soil retained, prevention-share diagnostics) are carried
+    through from the source run's integrated_country_gep.csv (BASELINE_INTEGRATED_CSV)
+    when provided. Writes integrated_country_gep.csv + country_gep_decomposition_long.csv
+    to OUT_DIR. Governed by VALUATION_MODE (use "percrop" for the harmonized values)."""
+    t0 = time.time()
+    if not SHARES_LONG_CSV or not Path(SHARES_LONG_CSV).exists():
+        raise FileNotFoundError(
+            "value_from_shares needs an existing per-crop protected-production long table; "
+            f"set GEP_EROSION_SHARES_LONG_CSV (got {SHARES_LONG_CSV!r})")
+    long = pd.read_csv(SHARES_LONG_CSV)
+    needed = {"component", "ISO3", "crop", "elasticity_used",
+              "protected_production_tons", "total_production_tons", "share_protected_production"}
+    missing = needed - set(long.columns)
+    if missing:
+        raise ValueError(f"shares long table {SHARES_LONG_CSV} missing columns: {sorted(missing)}")
+
+    df_gep_onfarm, df_gep_upstream, df_gep_combined = (
+        compute_country_gep_from_country_crop(
+            long[long["component"] == m].drop(columns=["component"]).copy(),
+            FAO_GPV_ISO3_CSV, FAO_PRICES_FULL_CSV, BASE_YEAR_FOR_CONSTANT,
+            GDP_CURRENT_2019_CSV, m)
+        for m in ("onfarm", "upstream", "combined"))
+
+    def _pivot_component(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
+        x = df.rename(columns={
+            "protected_production_tons": f"protected_production_tons_{prefix}",
+            "total_production_tons": f"total_production_tons_{prefix}",
+            "share_protected_production": f"share_protected_production_{prefix}",
+            "erosion_shock_share": f"erosion_shock_share_{prefix}",
+            "gep_const2019_usd": f"gep_const2019_usd_{prefix}",
+            "gdp_loss_pct": f"gdp_loss_pct_{prefix}",
+        })
+        keep = ["iso3",
+                f"protected_production_tons_{prefix}", f"total_production_tons_{prefix}",
+                f"share_protected_production_{prefix}", f"erosion_shock_share_{prefix}",
+                "crop_gpv_const2019_2019", "gdp_const2019_2019",
+                f"gep_const2019_usd_{prefix}", f"gdp_loss_pct_{prefix}"]
+        return x[keep]
+
+    w_on = _pivot_component(df_gep_onfarm, "onfarm")
+    w_up = _pivot_component(df_gep_upstream, "upstream")
+    w_com = _pivot_component(df_gep_combined, "combined")
+
+    val = w_on.merge(
+        w_up.drop(columns=["crop_gpv_const2019_2019", "gdp_const2019_2019"], errors="ignore"),
+        on="iso3", how="outer")
+    val = val.merge(
+        w_com.drop(columns=["crop_gpv_const2019_2019", "gdp_const2019_2019"], errors="ignore"),
+        on="iso3", how="outer")
+    val["gep_incremental_upstream_usd"] = val["gep_const2019_usd_combined"] - val["gep_const2019_usd_onfarm"]
+    val["gep_incremental_onfarm_usd"] = val["gep_const2019_usd_combined"] - val["gep_const2019_usd_upstream"]
+
+    # Carry non-valuation context columns through from the source run's integrated file;
+    # overwrite only the valuation/biophysical-share columns we just recomputed (same shares,
+    # so the biophysical ones are unchanged by construction).
+    if BASELINE_INTEGRATED_CSV and Path(BASELINE_INTEGRATED_CSV).exists():
+        base = pd.read_csv(BASELINE_INTEGRATED_CSV)
+        val_cols = [c for c in val.columns if c != "iso3"]
+        base = base.drop(columns=[c for c in val_cols if c in base.columns], errors="ignore")
+        out = base.merge(val, on="iso3", how="left")
+    else:
+        out = val
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out.to_csv(OUT_DIR / "integrated_country_gep.csv", index=False)
+    pd.concat([df_gep_onfarm, df_gep_upstream, df_gep_combined], ignore_index=True) \
+        .to_csv(OUT_DIR / "country_gep_decomposition_long.csv", index=False)
+
+    manifest = {
+        "timestamp_utc": datetime.utcnow().isoformat(),
+        "mode": "value_from_shares",
+        "valuation_mode": VALUATION_MODE,
+        "percrop_value_csv": str(PERCROP_VALUE_CSV) if VALUATION_MODE == "percrop" else None,
+        "fao_spam_crosswalk_csv": str(FAO_SPAM_CROSSWALK_CSV) if VALUATION_MODE == "percrop" else None,
+        "shares_long_csv": str(SHARES_LONG_CSV),
+        "baseline_integrated_csv": str(BASELINE_INTEGRATED_CSV) if BASELINE_INTEGRATED_CSV else None,
+        "outputs": {
+            "integrated_country_gep": str(OUT_DIR / "integrated_country_gep.csv"),
+            "country_gep_decomposition_long": str(OUT_DIR / "country_gep_decomposition_long.csv"),
+        },
+        "elapsed_minutes": round((time.time() - t0) / 60.0, 3),
+    }
+    with open(OUT_DIR / "manifest_value_from_shares.json", "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    comb = pd.to_numeric(out.get("gep_const2019_usd_combined"), errors="coerce")
+    print(f"✅ value_from_shares ({VALUATION_MODE}) → {OUT_DIR / 'integrated_country_gep.csv'}")
+    for m in ("onfarm", "upstream", "combined"):
+        c = f"gep_const2019_usd_{m}"
+        if c in out.columns:
+            print(f"   {c:34s} {pd.to_numeric(out[c], errors='coerce').sum()/1e9:10.3f} bn")
+    print(f"   countries with combined ERSV > 0 : {int((comb > 0).sum())}; missing (NaN): {int(comb.isna().sum())}")
+
+
 
 def configure_prevention_shares(p):
     """
@@ -1400,6 +1653,8 @@ def configure_prevention_shares(p):
     global APPLY_SEVERE_FILTER, YIELD_REDUCTION_FOR_SHOCK, MIN_SHOCK_FLOOR, BASE_YEAR_FOR_CONSTANT
     global AUTO_DOWNLOAD_WB, FORCE_REFRESH_WB, RASTERIZE_ALL_TOUCHED, CROPS_ONLY
     global DEM_MASK_BELOW_SEA_LEVEL, DEM_MAX_VALID_ELEV_M, ANALYSIS_EPSG
+    global VALUATION_MODE, PERCROP_VALUE_CSV, FAO_SPAM_CROSSWALK_CSV
+    global SHARES_LONG_CSV, BASELINE_INTEGRATED_CSV
 
     SCENARIO_NAME = getattr(p, 'erosion_scenario_name', SCENARIO_NAME)
     RUN_TAG = getattr(p, 'erosion_run_tag', RUN_TAG)
@@ -1450,6 +1705,15 @@ def configure_prevention_shares(p):
     DEM_MASK_BELOW_SEA_LEVEL = getattr(p, 'erosion_dem_mask_below_sea_level', True)
     DEM_MAX_VALID_ELEV_M = getattr(p, 'erosion_dem_max_valid_elev_m', 9000.0)
     ANALYSIS_EPSG = getattr(p, 'erosion_analysis_epsg', 8857)
+    VALUATION_MODE = str(getattr(p, 'erosion_valuation_mode', 'percrop')).strip().lower()
+    PERCROP_VALUE_CSV = Path(getattr(p, 'erosion_percrop_value_csv_path',
+                                     IN_DIR / "fao_values_2019_production_x_price.csv"))
+    FAO_SPAM_CROSSWALK_CSV = Path(getattr(p, 'erosion_fao_spam_crosswalk_path',
+                                          IN_DIR / "fao_item_spam2020_crop_correspondence.csv"))
+    _shares = getattr(p, 'erosion_shares_long_csv', None)
+    SHARES_LONG_CSV = Path(_shares) if _shares else None
+    _basei = getattr(p, 'erosion_baseline_integrated_csv', None)
+    BASELINE_INTEGRATED_CSV = Path(_basei) if _basei else None
 
 
 

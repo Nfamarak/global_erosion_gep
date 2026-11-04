@@ -46,11 +46,12 @@ global_erosion_gep/
     download_con_dem_3s.sh      conditioned DEM continental tiles -> VRT
     align_inputs_to_grid.sh     reproject/align SDR inputs to the analysis grid
     prep_sdr_inputs_fine.sh     prepare the 1 km conditioned SDR inputs
+    resample_sdr_to_accounting_grid.py  resample 1 km SDR outputs -> accounting grid (area-average)
     remap_flowdir.py            encode conditioned D8 flow direction
     upstream_conditioned.py     accumulate avoided/potential erosion -> upstream share
   sbatch/
-    regen_upstream.sbatch       Stage 3 template (upstream on conditioned network)
-    run_scenario.sbatch         Stages 2+4 template (SDR + valuation; one per scenario)
+    regen_upstream.sbatch       Stage 4 template (upstream on conditioned network)
+    run_scenario.sbatch         Stages 2+5 template (SDR + valuation; one per scenario)
   figures/
     make_erosion_gep_figures.py publication figures (bars, scatter, heatmap, maps)
   validation/
@@ -68,7 +69,7 @@ conda activate gep_erosion
 Key dependencies: `natcap.invest`, `hazelbean`, `pygeoprocessing`, `rasterio`,
 `geopandas`, `rioxarray`, `pandas`, `numpy`, `matplotlib`, `mapclassify`.
 
-## Pipeline (four stages)
+## Pipeline (five stages)
 
 1. **Acquire conditioned inputs** (`conditioned_inputs/`): download the HydroSHEDS
    conditioned DEM and 30 arc-sec flow-direction grid, then align the SDR inputs to
@@ -77,16 +78,28 @@ Key dependencies: `natcap.invest`, `hazelbean`, `pygeoprocessing`, `rasterio`,
    four SDR inputs must be the 1 km conditioned/aligned layers on the same grid:
    `GEP_EROSION_DEM_PATH` (conditioned DEM), `GEP_EROSION_LULC_PATH`,
    `GEP_EROSION_ERODIBILITY_PATH`, `GEP_EROSION_EROSIVITY_PATH`. Produces the `usle`
-   and `avoided_erosion` rasters.
-3. **Regenerate the upstream prevention share** (`sbatch/regen_upstream.sbatch`):
+   and `avoided_erosion` rasters at ~1 km.
+3. **Resample the SDR outputs to the accounting grid**
+   (`conditioned_inputs/resample_sdr_to_accounting_grid.py`). The SDR runs at ~1 km, but
+   the account is tallied on the grid of the baseline erosion raster
+   `usle_2019_revised_feb_13.tif` (EPSG:3857 Web Mercator, 6,446.75 m, 6217x3968; the
+   valuation reprojects to the equal-area Equal Earth EPSG:8857 for the tonnes
+   conversion). This step area-average-resamples (`Resampling.average`, correct for the
+   intensive t ha-1 yr-1 erosion rasters) the `usle` and `avoided_erosion` rasters onto
+   that template, and the
+   valuation's `GEP_EROSION_VAL_USLE_PATH` / `GEP_EROSION_VAL_AVOIDED_PATH` point at the
+   results. **Skipping this runs the valuation at the native ~1 km resolution instead of
+   the accounting grid.** (On MSI these outputs live in `sdr_on_feb_grid/`, so named only
+   because the template raster is from the February baseline run.)
+4. **Regenerate the upstream prevention share** (`sbatch/regen_upstream.sbatch`):
    `remap_flowdir.py` encodes the conditioned D8 flow direction and
    `upstream_conditioned.py` accumulates avoided and potential erosion on that
-   network to a 0..1 share, resampled to the analysis grid.
-4. **Value the account** (`sbatch/run_scenario.sbatch`): the valuation reads the
-   conditioned SDR rasters and the conditioned upstream share. Run once per scenario
-   (`GEP_EROSION_THRESH_HIGH=11` for SES-11, `=5` for EPS-5). Each run must write to a
-   **fresh** `GEP_EROSION_OUTPUT_DIR` (the valuation skips if `integrated_country_gep.csv`
-   already exists).
+   network to a 0..1 share, resampled to the accounting grid.
+5. **Value the account** (`sbatch/run_scenario.sbatch`): the valuation reads the
+   accounting-grid SDR rasters (stage 3) and the conditioned upstream share. Run once
+   per scenario (`GEP_EROSION_THRESH_HIGH=11` for SES-11, `=5` for EPS-5). Each run must
+   write to a **fresh** `GEP_EROSION_OUTPUT_DIR` (the valuation skips if
+   `integrated_country_gep.csv` already exists).
 
 Then build figures with `figures/make_erosion_gep_figures.py`.
 

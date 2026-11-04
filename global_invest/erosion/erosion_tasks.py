@@ -38,6 +38,26 @@ def task_compute_prevention_shares(p):
     return True
 
 
+def task_value_from_shares(p):
+    """
+    Valuation-only from an EXISTING run's per-crop protected-production long table,
+    with no InVEST SDR run and no biophysical prevention-share recompute. Reuses the
+    same compute_country_gep_from_country_crop() as task_compute_prevention_shares, so
+    the monetary account matches a full valuation run on those shares. Reads
+    GEP_EROSION_SHARES_LONG_CSV (+ optional GEP_EROSION_BASELINE_INTEGRATED_CSV for
+    context columns); writes integrated_country_gep.csv to the output dir. Seconds, not
+    hours -- use it to re-value a completed run under a different VALUATION_MODE/value table.
+    """
+    erosion_functions.configure_prevention_shares(p)
+
+    service_results = p.results.setdefault('erosion', {})
+    service_results['integrated_country_gep'] = os.path.join(
+        erosion_functions.OUT_DIR, "integrated_country_gep.csv")
+
+    erosion_functions.integrate_and_write_from_shares()
+    return True
+
+
 def task_generate_maps_and_figures(p):
     """
     Task wrapper for Section C: publication-ready choropleths, raster

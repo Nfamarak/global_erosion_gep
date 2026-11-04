@@ -77,15 +77,13 @@ def set_erosion_paths(p):
         "GEP_EROSION_RUN_TAG", "ses11_onfarm_upstream_combined_20260305")
     p.erosion_gep_input_dir = os.path.join(p.erosion_gep_root, "inputs_v2", "erosion_gep")
     # jajohns group quota is full -- write outputs to scratch by default.
-    # Point GEP_EROSION_OUTPUT_DIR at a FRESH dir for the corrected re-run.
+    # Point GEP_EROSION_OUTPUT_DIR at a FRESH dir for each re-run.
     p.erosion_gep_output_dir = _env(
         "GEP_EROSION_OUTPUT_DIR",
         f"/scratch.global/{os.environ.get('USER', 'user')}/erosion_full_run/prevention_share_output")
-    # Valuation inputs (actual + avoided erosion rasters). For the REVISED finer run,
-    # point these at the conditioned-DEM SDR outputs resampled to the analysis grid,
-    # via GEP_EROSION_VAL_USLE_PATH / GEP_EROSION_VAL_AVOIDED_PATH. Default is the
-    # ~6.45 km baseline SDR. (This is the knob that fixes the handover "valuation
-    # reads Feb SDR" issue -- see CHANGELOG / README.)
+    # Valuation inputs (actual + avoided erosion rasters). Point these at the
+    # conditioned-DEM SDR outputs resampled to the analysis grid, via
+    # GEP_EROSION_VAL_USLE_PATH / GEP_EROSION_VAL_AVOIDED_PATH.
     p.erosion_usle_path = _env(
         "GEP_EROSION_VAL_USLE_PATH",
         os.path.join(p.erosion_gep_input_dir, "usle_2019_revised_feb_13.tif"))
@@ -95,10 +93,8 @@ def set_erosion_paths(p):
     p.erosion_country_boundary_path = os.path.join(
         p.erosion_gep_input_dir, "country_boundary_r250_with_iso3.gpkg")
 
-    # Boundary rasterization rule. Cell-centre (all_touched=False) reproduces
-    # the reconciled cell-centre run (~$18.24B, 161 countries); all-touched (True) was
-    # the earlier default (~$18.09B, 162). Env-overridable: set
-    # GEP_EROSION_ALL_TOUCHED=true to restore all-touched.
+    # Boundary rasterization rule. Default cell-centre (all_touched=False); set
+    # GEP_EROSION_ALL_TOUCHED=true for all-touched.
     p.erosion_rasterize_all_touched = _env(
         "GEP_EROSION_ALL_TOUCHED", "false").strip().lower() in ("1", "true", "yes")
 
@@ -113,6 +109,45 @@ def set_erosion_paths(p):
     # Low threshold (small/low-elevation countries): 2.
     p.erosion_threshold_high_t_ha_yr = float(_env("GEP_EROSION_THRESH_HIGH", "11"))
     p.erosion_threshold_low_t_ha_yr = float(_env("GEP_EROSION_THRESH_LOW", "2"))
+
+    # Valuation mode: "percrop" (default, harmonized headline: per-crop crop-provision
+    # values x per-crop share x elasticity) or "shock_x_gpv". The value table defaults to
+    # inputs_v2/erosion_gep/fao_values_2019_production_x_price.csv (only its in_crop_provision_account
+    # rows are used); override with GEP_EROSION_PERCROP_VALUE_CSV.
+    p.erosion_valuation_mode = _env("GEP_EROSION_VALUATION_MODE", "percrop")
+    _pcsv = _env("GEP_EROSION_PERCROP_VALUE_CSV", "")
+    if _pcsv:
+        p.erosion_percrop_value_csv_path = _pcsv
+    # FAO item -> SPAM crop correspondence CSV (defaults to
+    # inputs_v2/erosion_gep/fao_item_spam2020_crop_correspondence.csv; the embedded
+    # CROP_ITEM_CODE_TO_SPAM is the fallback). Override with GEP_EROSION_FAO_SPAM_CROSSWALK_CSV.
+    _xw = _env("GEP_EROSION_FAO_SPAM_CROSSWALK_CSV", "")
+    if _xw:
+        p.erosion_fao_spam_crosswalk_path = _xw
+    # FAO GPV + price inputs used ONLY by shock_x_gpv valuation (the national-GPV fallback).
+    # Default to inputs_v2/erosion_gep/; override when they live elsewhere (percrop does not need them).
+    _faogpv = _env("GEP_EROSION_FAO_GPV_CSV", "")
+    if _faogpv:
+        p.erosion_fao_gpv_iso3_csv_path = _faogpv
+    _faopx = _env("GEP_EROSION_FAO_PRICES_CSV", "")
+    if _faopx:
+        p.erosion_fao_prices_csv_path = _faopx
+    # DEM used ONLY by the small-country / low-elevation threshold rule (country mean elevation).
+    # Defaults to the coarse global_dem_reproj.tif; point at the finer 1 km DEM to use it here too.
+    # NOTE: this changes the severity-threshold classification (hence biophysical shares), so it is
+    # NOT a valuation-only change -- rerun and expect differences vs the coarse-DEM run.
+    _elev = _env("GEP_EROSION_ELEVATION_PATH", "")
+    if _elev:
+        p.erosion_elevation_path = _elev
+    # value_from_shares inputs (GEP_EROSION_TASK_TREE=value_from_shares): re-value an existing
+    # run's country_crop_protected_production_long.csv under the current VALUATION_MODE, with no
+    # biophysical recompute. Optional baseline integrated CSV carries context columns through.
+    _shares = _env("GEP_EROSION_SHARES_LONG_CSV", "")
+    if _shares:
+        p.erosion_shares_long_csv = _shares
+    _basei = _env("GEP_EROSION_BASELINE_INTEGRATED_CSV", "")
+    if _basei:
+        p.erosion_baseline_integrated_csv = _basei
     return p
 
 
@@ -125,8 +160,12 @@ if __name__ == "__main__":
         os.path.join(os.path.expanduser("~"), "Files", "global_invest", "projects", p.project_name))
     p.set_project_dir(p.project_dir)
 
-    # Task tree
-    erosion_initialization.add_erosion_tasks(p)
+    # Task tree. Default "full" (SDR -> valuation -> figures); override with GEP_EROSION_TASK_TREE =
+    # calculation | valuation (no SDR/figures) | value_from_shares (re-value an existing shares
+    # table, no biophysics) | results (figures only).
+    _tree = _env("GEP_EROSION_TASK_TREE", "full")
+    hb.log("Task tree: " + _tree)
+    erosion_initialization.add_erosion_tasks_for_tree(p, _tree)
 
     # Paths (env-overridable, Agate fallbacks)
     set_erosion_paths(p)

@@ -1,8 +1,9 @@
 # global_erosion_gep
 
-> **Revised build — finer hydrologically conditioned DEM.** The upstream term and
-> the SDR run are recomputed on a HydroSHEDS-conditioned ~1 km DEM. See the
-> top-level **README.md** (authoritative headline) and **CHANGELOG.md**.
+> **Revised build — 1 km conditioned DEM + harmonized per-crop valuation.** The upstream
+> term and the SDR run are computed on a HydroSHEDS-conditioned ~1 km DEM, and the headline
+> account is valued with the common `crop_provision` per-crop values
+> (`GEP_EROSION_VALUATION_MODE=percrop`). See the top-level **README.md** and **CHANGELOG.md**.
 
 GEP (Global Ecosystem services and Products) erosion / sediment retention
 service module, built on [hazelbean](https://github.com/jandrewjohnson/hazelbean)'s
@@ -25,19 +26,19 @@ stabilizing soils, reducing runoff energy, and limiting sediment
 transport — a regulating ecosystem service this module quantifies as an
 annual economic flow, consistent with SEEA-EA ecosystem accounting.
 
-The headline result (SES-11 baseline, 2019 USD, revised conditioned-DEM run):
-soil-retention services protect an estimated **USD 44.5 billion/yr** of global
-crop production (~1.6% of global crop gross production value), across 171
-countries. The EPS-5 sensitivity (threshold 5 t·ha⁻¹·yr⁻¹) gives USD 80.1
-billion/yr across 174 countries. Absolute values concentrate in large
-agricultural economies (China, India, Indonesia); relative dependence (share of
-GDP) is highest in low-income, agriculture-dependent economies (Sierra Leone,
-Burundi, Liberia — each exceeding 2% of GDP).
+The headline result (SES-11, 2019 USD, 1 km conditioned-DEM biophysics with harmonized
+per-crop valuation): soil-retention services protect an estimated **USD 59.9 billion/yr**
+of global crop production across **169 countries**. The EPS-5 sensitivity (general
+threshold 5 t·ha⁻¹·yr⁻¹) gives **USD 106.0 billion/yr** across 172 countries. Absolute
+values concentrate in large agricultural economies (China, India, Indonesia); relative
+dependence (share of GDP) is highest in low-income, agriculture-dependent economies.
+Country coverage follows the common crop-provision account (Taiwan and Macao are
+out-of-account, together <1% of the global total).
 
 ## File structure
 
 Follows the `run / tasks / functions / initialize / utils` convention used
-across GEP service modules (per Justin Johnson's 2026-07-07 email):
+across GEP service modules:
 
 ```
 erosion/
@@ -139,15 +140,34 @@ Shock_k^m = Σ_c (PP_{c,k}^m · ε_c) / Σ_c TotalProd_{c,k}
 ```
 (A small numerical floor prevents unstable near-zero values.)
 
-**8. Monetary valuation / GEP** (eq. 10) — applying the shock share to
-national crop Gross Production Value (FAOSTAT, constant 2019 USD):
-```
-GEP_k^m = GPV_k × Shock_k^m
-```
+**8. Monetary valuation / ERSV** (eq. 10) — two selectable modes, set by
+`GEP_EROSION_VALUATION_MODE`:
+
+- **`percrop`** (default, the harmonized headline) values each crop's protected
+  production at its own crop value and sums to the national total, removing the
+  within-country aggregation approximation:
+  ```
+  ERSV_k^m = Σ_c value_usd_{c,k} × Share_{c,k}^m × ε_c
+  ```
+  `value_usd` is the per-crop value from the common `crop_provision` table
+  (`in_crop_provision_account` rows only, so byproducts/no-price items are
+  excluded at source). FAO items map to SPAM crops via the FAO→SPAM
+  correspondence CSV; a pooled FAO code (one item → several SPAM crops) has its
+  value split across them by SPAM production tonnes.
+- **`shock_x_gpv`** applies the national shock share to national crop Gross
+  Production Value (FAOSTAT, constant 2019 USD):
+  ```
+  ERSV_k^m = GPV_k × Shock_k^m
+  ```
+
+The headline uses `percrop`; `shock_x_gpv` is retained as the national-aggregate
+comparator (prior basis). See `CHANGELOG.md` for the method decomposition — the crop
+corrections and the move to per-crop valuation — with the figures for each step.
+
 Optionally normalized against national GDP (eq. 11, World Bank 2019) for
 macroeconomic interpretation:
 ```
-GDPShare_k^m = GEP_k^m / GDP_k
+GDPShare_k^m = ERSV_k^m / GDP_k
 ```
 
 ### Section C — Maps & figures
@@ -171,25 +191,43 @@ without threading a config object through every function call — see the
 design note at the top of `erosion_functions.py` for why this pattern was
 chosen over refactoring the original notebooks' internals.
 
-## Known data-path quirks
+## Run configuration (environment hooks)
 
-The three original research notebooks this module was built from
-hardcoded paths inconsistently:
+`run_erosion.py` resolves every path and knob from `GEP_EROSION_*` environment
+variables, so a run needs no code edits. The main hooks:
 
-- **Two different roots.** Section A's SDR run and Sections B/C's
-  prevention-share valuation were originally pointed at different
-  directories. `run_erosion.py` now points both at the same confirmed
-  current location on MSI's Agate cluster
-  (`/projects/standard/jajohns/shared/sediment_gep/sediment_feb_2026`),
-  but Section B's `usle_path`/`avoided_erosion_path` still default to
-  pre-computed files rather than Section A's fresh output — wire these
-  together for a true end-to-end run once both stages share one project
-  layout.
-- **`RUN_TAG` mismatch.** The original maps notebook read from an
-  `eps5_...`-tagged output directory that didn't match the
-  `ses11_...`-tagged directory the prevention-share notebook actually
-  wrote to. `configure_maps()` now defaults to `ses11`; confirm this is
-  the run you want mapped before trusting Section C's output.
+| Variable | Purpose |
+|---|---|
+| `GEP_EROSION_TASK_TREE` | `full` (SDR→valuation→figures, default), `calculation`, `valuation` (valuation only, no SDR/figures), `value_from_shares` (re-value an existing shares table, no biophysics — seconds), or `results` |
+| `GEP_EROSION_VALUATION_MODE` | `percrop` (default, harmonized headline) or `shock_x_gpv` |
+| `GEP_EROSION_SHARES_LONG_CSV` | `value_from_shares`: an existing run's `country_crop_protected_production_long.csv` to re-value |
+| `GEP_EROSION_BASELINE_INTEGRATED_CSV` | `value_from_shares`: that run's `integrated_country_gep.csv` (carries non-valuation context columns through) |
+| `GEP_EROSION_VAL_USLE_PATH` / `GEP_EROSION_VAL_AVOIDED_PATH` | actual/avoided-erosion rasters the valuation reads (point at the conditioned-DEM SDR outputs) |
+| `GEP_EROSION_UPS_PATH` | upstream prevention-share raster (conditioned flow network) |
+| `GEP_EROSION_PERCROP_VALUE_CSV` / `GEP_EROSION_FAO_SPAM_CROSSWALK_CSV` | per-crop value table and FAO→SPAM correspondence (`percrop` mode) |
+| `GEP_EROSION_THRESH_HIGH` / `GEP_EROSION_THRESH_LOW` | severity thresholds (SES-11: 11/2; EPS-5: 5/1) |
+| `GEP_EROSION_DEM_PATH` / `GEP_EROSION_ELEVATION_PATH` | DEM for the SDR run / DEM for the country-elevation threshold rule |
+| `GEP_EROSION_OUTPUT_DIR` | output directory — point at a **fresh** dir per run (the valuation skips if `integrated_country_gep.csv` already exists) |
+
+Ready-to-use SLURM launchers are in `sbatch/`. A valuation-only re-run (no InVEST
+SDR) uses `GEP_EROSION_TASK_TREE=valuation` and reads the existing conditioned SDR
+outputs via the `VAL_USLE`/`VAL_AVOIDED`/`UPS` hooks.
+
+To re-value a *completed* run without recomputing any biophysics — e.g. apply the
+harmonized per-crop values to the finished 1 km prevention shares — use
+`value_from_shares`, which reads that run's per-crop protected-production long table
+and finishes in seconds (login-node safe, no SLURM):
+
+```bash
+GEP_EROSION_TASK_TREE=value_from_shares \
+GEP_EROSION_VALUATION_MODE=percrop \
+GEP_EROSION_SHARES_LONG_CSV=RESULTS/country_crop_protected_production_long.csv \
+GEP_EROSION_BASELINE_INTEGRATED_CSV=RESULTS/integrated_country_gep.csv \
+GEP_EROSION_PERCROP_VALUE_CSV=INPUTS/fao_values_2019_production_x_price.csv \
+GEP_EROSION_FAO_SPAM_CROSSWALK_CSV=INPUTS/fao_item_spam2020_crop_correspondence.csv \
+GEP_EROSION_OUTPUT_DIR=OUT/ses11_harmonized \
+python -m global_invest.erosion.run_erosion
+```
 
 ## Installation
 
@@ -260,13 +298,6 @@ silently fall through to the base environment otherwise).
 
 ## Known issues / TODO
 
-- Wire Section A's SDR output directory into Section B's
-  USLE/avoided-erosion input paths for a true end-to-end run.
-- Confirm the `ses11` vs `eps5` run-tag mismatch against whichever run is
-  actually current before trusting Section C's maps.
-- Consider surfacing `EPS-5` as a selectable scenario (not just SES-11)
-  in `configure_prevention_shares(p)`, since the manuscript reports it as
-  a formal sensitivity analysis, not just an alternate default.
-- Several generic raster/plotting helpers in `erosion_utils.py` are
-  likely duplicated across other GEP contributors' code — candidates for
-  a future shared `global_invest.utils` or upstreaming into `hazelbean`.
+- Several generic raster/plotting helpers in `erosion_utils.py` are likely
+  shared with other GEP service modules — candidates for a future shared
+  `global_invest.utils` or upstreaming into `hazelbean`.
