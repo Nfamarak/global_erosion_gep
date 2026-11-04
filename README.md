@@ -4,32 +4,46 @@ A reproducible global account of the value of crop production that vegetation an
 land cover protect from water-driven soil erosion, implemented as a Gross Ecosystem
 Product (GEP) account aligned with SEEA Ecosystem Accounting. The account couples
 InVEST SDR (RUSLE-based) erosion modelling with an on-farm and upstream prevention
-share, and values the protected production using SPAM2020 production, FAOSTAT prices,
-and crop-specific erosion-yield elasticities.
+share, and values the protected production **per crop** using the common
+crop-provision value table (production x price, constant 2019 USD) and crop-specific
+erosion-yield elasticities.
 
 This repository accompanies the *Land Use Policy* manuscript **LUP-D-26-02970** and
 reproduces the **revised (finer hydrologically conditioned-DEM) account**.
+
+**Authors:** Nfamara K. Dampha (NatCap TEEMs, University of Minnesota),
+Justin Johnson (University of Minnesota), Chiara Colesanti Senni (University of Zurich).
 
 ## Headline result (2019, revised run)
 
 | Scenario | Severity threshold | Combined GEP | On-farm | Upstream | Countries |
 |---|---|---|---|---|---|
-| SES-11 (headline) | >= 11 t ha-1 yr-1 | **USD 44.5 billion / yr** | 35.3 | 35.4 | 171 |
-| EPS-5 (sensitivity) | >= 5 t ha-1 yr-1 | **USD 80.1 billion / yr** | 63.2 | 63.6 | 174 |
+| SES-11 (headline) | >= 11 t ha-1 yr-1 | **USD 59.9 billion / yr** | 47.9 | 48.0 | 169 |
+| EPS-5 (sensitivity) | >= 5 t ha-1 yr-1 | **USD 106.0 billion / yr** | 84.2 | 84.5 | 172 |
 
-All figures are 2019 constant USD; the combined headline is about 1.6% of global crop
-gross production value.
+All figures are 2019 constant USD, harmonized per-crop valuation
+(`GEP_EROSION_VALUATION_MODE=percrop`, the default). Country coverage follows the
+common crop-provision account; Taiwan and Macao are out-of-account (together <1% of
+the total). The combined share is a probabilistic union of the two pathways, so it is
+an upper-envelope summary, not an additive sum.
 
 ## What is new in the revised run
 
-The original account routed the upstream term on a coarse (~6.45 km) aggregated DEM.
-Following review, the account is recomputed on a **hydrologically conditioned,
-finer-resolution DEM (HydroSHEDS-conditioned, ~1 km)**, which resolves the
-slope length and steepness that the coarse grid flattened. Modelled soil retention
-rises about 2.2x and the combined account rises about 2.5x (from roughly USD 18
-billion to USD 44.5 billion). The coarse-grid account is therefore a **conservative
-lower bound**. The mechanism (RUSLE LS-factor sensitivity to DEM resolution) is
-documented in the manuscript Supplementary Information.
+Two revisions relative to the originally submitted account:
+
+1. **Finer biophysics.** The upstream term and the SDR run are recomputed on a
+   **hydrologically conditioned, finer-resolution DEM (HydroSHEDS-conditioned, ~1 km)**
+   in place of the coarse (~6.45 km) aggregated DEM, which resolves the slope length
+   and steepness the coarse grid flattened (RUSLE LS-factor sensitivity to DEM
+   resolution; documented in the manuscript Supplementary Information).
+2. **Harmonized valuation.** Protected production is valued **per crop** using the
+   common `crop_provision` value table and the FAO->SPAM correspondence
+   (`GEP_EROSION_VALUATION_MODE=percrop`), replacing the national tonnes-weighted
+   shock x total-GPV approximation and aligning the erosion account with the other
+   GEP service accounts.
+
+The headline combined account is **USD 59.9 billion/yr** (SES-11). `CHANGELOG.md`
+records the step-by-step method decomposition.
 
 ## Repository layout
 
@@ -144,10 +158,18 @@ baseline paths as fallback, so no code editing is needed.
 | `GEP_EROSION_ALL_TOUCHED` | boundary rasterization rule | false (cell-centre) |
 | `GEP_EROSION_OUTPUT_DIR` | output directory (use a fresh one per run) | your scratch dir |
 | `GEP_EROSION_RUN_TAG` | run label | e.g. `ses11_conditioned` |
+| `GEP_EROSION_VALUATION_MODE` | valuation method | `percrop` (default, harmonized headline) or `shock_x_gpv` |
+| `GEP_EROSION_PERCROP_VALUE_CSV` | per-crop crop-provision value table (`percrop`) | `fao_values_2019_production_x_price.csv` |
+| `GEP_EROSION_FAO_SPAM_CROSSWALK_CSV` | FAO->SPAM correspondence (`percrop`) | `fao_item_spam2020_crop_correspondence.csv` |
+| `GEP_EROSION_TASK_TREE` | stages to run | `full` / `calculation` / `valuation` / `value_from_shares` / `results` |
 
 Pointing `GEP_EROSION_VAL_USLE_PATH` / `GEP_EROSION_VAL_AVOIDED_PATH` at the
 conditioned SDR outputs is what makes the valuation reflect the finer run rather
-than the baseline SDR.
+than the baseline SDR. The default `percrop` valuation needs the value table and
+FAO->SPAM correspondence above. To re-value a completed run without recomputing the
+biophysics (e.g. apply the per-crop values to finished shares), use
+`GEP_EROSION_TASK_TREE=value_from_shares` with `GEP_EROSION_SHARES_LONG_CSV` pointed
+at that run's `country_crop_protected_production_long.csv` — seconds, no SDR.
 
 ## Key output
 
@@ -181,7 +203,7 @@ at Zenodo; see `CITATION.cff` for the DOI.
 ## Citation
 
 Please cite both the software (Zenodo DOI in `CITATION.cff`) and the article
-(Dampha and Johnson, *Land Use Policy*, LUP-D-26-02970).
+(Dampha, Johnson, and Colesanti Senni, *Land Use Policy*, LUP-D-26-02970).
 
 ## License
 
