@@ -25,19 +25,21 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
 # =========================== CONFIG — EDIT ===========================
-# Reads the consolidated archive and writes figures into <ARCHIVE>/figures/.
+# Reads the consolidated archive (harmonized results) and writes figures into <ARCHIVE>/figures_harmonized/.
 SCENARIO   = "ses11"                       # "ses11" (headline) or "eps5" (sensitivity)
 ARCHIVE    = Path("/projects/standard/jajohns/shared/nfamara/erosion_global_gep_final")
-SCEN_DIR   = {"ses11":"ses11_headline","eps5":"eps5_sensitivity"}[SCENARIO]
+# Harmonized per-crop valuation (percrop) results: the *_harmonized dirs hold the
+# harmonized integrated CSV plus the copied shares + prevention-share rasters.
+SCEN_DIR   = {"ses11":"ses11_headline_harmonized","eps5":"eps5_sensitivity_harmonized"}[SCENARIO]
 PSDIR      = ARCHIVE / "results" / SCEN_DIR
-CSV_SES    = ARCHIVE / "results" / "ses11_headline"   / "integrated_country_gep.csv"
-CSV_EPS    = ARCHIVE / "results" / "eps5_sensitivity" / "integrated_country_gep.csv"
+CSV_SES    = ARCHIVE / "results" / "ses11_headline_harmonized"   / "integrated_country_gep.csv"
+CSV_EPS    = ARCHIVE / "results" / "eps5_sensitivity_harmonized" / "integrated_country_gep.csv"
 CROP_CSV   = PSDIR / "country_crop_protected_production_combined.csv"
 PS_COMBINED= PSDIR / "ps_combined_union_cropland_severe.tif"
 SDR_USLE   = ARCHIVE / "sdr_outputs_conditioned" / "usle_conddem1km_2019.tif"
 SDR_AVOID  = ARCHIVE / "sdr_outputs_conditioned" / "avoided_erosion_conddem1km_2019.tif"
 BOUNDARY_GPKG = ARCHIVE / "inputs_conditioned" / "valuation" / "country_boundary_r250_with_iso3.gpkg"
-FIGDIR     = ARCHIVE / "figures"
+FIGDIR     = ARCHIVE / "figures_harmonized"   # non-destructive: keeps the prior figures/
 # =====================================================================
 
 FIGDIR.mkdir(parents=True, exist_ok=True)

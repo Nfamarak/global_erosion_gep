@@ -23,10 +23,10 @@ What it does
 Paths (override any with an env var of the same name)
 -----------------------------------------------------
     GEP_ARCHIVE   default /projects/standard/jajohns/shared/nfamara/erosion_global_gep_final
-    GEP_SES11_CSV default $GEP_ARCHIVE/results/ses11_headline/integrated_country_gep.csv
-    GEP_EPS5_CSV  default $GEP_ARCHIVE/results/eps5_sensitivity/integrated_country_gep.csv
+    GEP_SES11_CSV default $GEP_ARCHIVE/results/ses11_headline_harmonized/integrated_country_gep.csv
+    GEP_EPS5_CSV  default $GEP_ARCHIVE/results/eps5_sensitivity_harmonized/integrated_country_gep.csv
     PANAGOS_CSV   default $GEP_ARCHIVE/eu_comparison/inputs/Panagos_2018_crop_productivity_loss.csv
-    EU_OUT_DIR    default $GEP_ARCHIVE/figures/eu_comparison
+    EU_OUT_DIR    default $GEP_ARCHIVE/figures_harmonized/eu_comparison
 
 Panagos input schema (one row per EU country):
     Country, Crop_Productivity_Loss_million_euro_2010   (iso3 optional)
@@ -54,15 +54,16 @@ ARCHIVE = Path(os.environ.get(
     "GEP_ARCHIVE",
     "/projects/standard/jajohns/shared/nfamara/erosion_global_gep_final"))
 
+# Harmonized per-crop valuation (percrop) results -- the *_harmonized dirs.
 SES11_CSV = Path(os.environ.get(
-    "GEP_SES11_CSV", ARCHIVE / "results" / "ses11_headline" / "integrated_country_gep.csv"))
+    "GEP_SES11_CSV", ARCHIVE / "results" / "ses11_headline_harmonized" / "integrated_country_gep.csv"))
 EPS5_CSV = Path(os.environ.get(
-    "GEP_EPS5_CSV", ARCHIVE / "results" / "eps5_sensitivity" / "integrated_country_gep.csv"))
+    "GEP_EPS5_CSV", ARCHIVE / "results" / "eps5_sensitivity_harmonized" / "integrated_country_gep.csv"))
 
 PANAGOS_CSV = Path(os.environ.get(
     "PANAGOS_CSV", ARCHIVE / "eu_comparison" / "inputs" / "Panagos_2018_crop_productivity_loss.csv"))
 
-OUT_DIR = Path(os.environ.get("EU_OUT_DIR", ARCHIVE / "figures" / "eu_comparison"))
+OUT_DIR = Path(os.environ.get("EU_OUT_DIR", ARCHIVE / "figures_harmonized" / "eu_comparison"))
 FIG_DIR = OUT_DIR / "figures"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR.mkdir(parents=True, exist_ok=True)
