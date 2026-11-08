@@ -58,12 +58,12 @@ WB_INCOME = {
  "NLD","NOR","NZL","OMN","PAN","POL","PRI","PRT","ROU","RUS","SAU","SGP","SVK","SVN","SWE","TTO","URY","USA"],
 "Upper middle income":["ALB","ARG","ARM","AZE","BIH","BLR","BLZ","BRA","CHN","COL","CRI","CUB","DMA","DOM","DZA",
  "ECU","FJI","GAB","GEO","GNQ","GRD","GTM","IDN","IRQ","JAM","KAZ","LBY","LCA","MDA","MEX","MKD","MNE","MYS","PER",
- "PRY","SLV","SRB","SUR","THA","TKM","TUR","VCT","ZAF"],
+ "PRY","SLV","SRB","SUR","THA","TKM","TUR","VCT","ZAF","NAM"],
 "Lower middle income":["AGO","BEN","BGD","BOL","BTN","CIV","CMR","COG","DJI","GHA","GIN","HND","HTI","IND","IRN",
  "JOR","KEN","KGZ","KHM","LAO","LBN","LKA","LSO","MAR","MMR","MNG","NGA","NIC","NPL","PAK","PHL","PNG","PSE","SEN",
- "SLB","STP","SWZ","TJK","TLS","TUN","TZA","UKR","UZB","VNM","VUT","ZMB","ZWE"],
+ "SLB","STP","SWZ","TJK","TLS","TUN","TZA","UKR","UZB","VNM","VUT","ZMB","ZWE","EGY","MRT"],
 "Low income":["AFG","BDI","BFA","CAF","COD","ETH","GMB","GNB","LBR","MDG","MLI","MOZ","MWI","NER","RWA","SDN",
- "SLE","SOM","SYR","TCD","TGO","UGA"],
+ "SLE","SOM","SYR","TCD","TGO","UGA","ERI","PRK","SSD","YEM"],
 }
 INCOME={iso:grp for grp,lst in WB_INCOME.items() for iso in lst}
 SPAM={"sugc":"Sugarcane","vege":"Vegetables","rice":"Rice","maiz":"Maize","pota":"Potato","trof":"Tropical fruit",
